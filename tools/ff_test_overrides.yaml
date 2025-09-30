@@ -1,0 +1,114 @@
+# This file configures the test override tool. It specifies which files to modify
+# and what changes to apply. The tool is useful for making temporary modifications
+# to FlutterFlow-generated tests that would otherwise be overwritten.
+
+# The `targets` section lists the files to patch using glob patterns.
+# The paths are relative to the project root.
+targets:
+  - integration_test/*.dart
+  - integration_test/**/*.dart
+
+# The `steps` section defines a sequence of modifications to apply to the target files.
+# Each step is a map with a single key that specifies the operation to perform.
+# The steps are run in the order they are defined.
+steps:
+  # Step 1: Ensure a custom import is present.
+  # This is useful for importing custom code that is not part of the generated test.
+  - ensure_import:
+      import: "package:upload_image_test_case/custom_code/actions/set_fake_image_picker.dart"
+      after_import: "package/upload_image_test_case/flutter_flow/flutter_flow_util.dart"
+
+  # Step 2: Make sure the IntegrationTest binding is initialized.
+  # This is required for integration tests to run correctly.
+  - ensure_line_after_match:
+      match: "void main\\(\\) async \\{"
+      lines:
+        - "  IntegrationTestWidgetsFlutterBinding.ensureInitialized();"
+      unique: true
+
+  # Step 3: Ensure `setUpAll` exists and inject your setup code at the top of its body.
+  # This is useful for running setup code before any tests are run.
+  - ensure_setup_all:
+      insert_lines_at_start:
+        - "    await setFakeImagePicker();"
+        - "    await FlutterFlowTheme.initialize();"
+
+  # Step 4: Make sure the `_overrideOnError` function exists.
+  # This function is used to ignore certain types of errors that can happen during tests
+  # but should not cause the test to fail.
+  - ensure_function:
+      name: "_overrideOnError"
+      if_missing_append: |
+        // There are certain types of errors that can happen during tests but
+        // should not break the test.
+        void _overrideOnError() {
+          final originalOnError = FlutterError.onError!;
+          FlutterError.onError = (errorDetails) {
+            if (_shouldIgnoreError(errorDetails.toString())) {
+              return;
+            }
+            originalOnError(errorDetails);
+          };
+        }
+
+        bool _shouldIgnoreError(String error) {
+          // It can fail to decode some SVGs - this should not break the test.
+          if (error.contains('ImageCodecException')) {
+            return true;
+          }
+          // Overflows happen all over the place,
+          // but they should not break tests.
+          if (error.contains('overflowed by')) {
+            return true;
+          }
+          // Sometimes some images fail to load, it generally does not break the test.
+          if (error.contains('No host specified in URI') ||
+              error.contains('EXCEPTION CAUGHT BY IMAGE RESOURCE SERVICE')) {
+            return true;
+          }
+          // These errors should be avoided, but they should not break the test.
+          if (error.contains('setState() called after dispose()')) {
+            return true;
+          }
+          // Web-specific error when interacting with TextInputType.emailAddress
+          if (error.contains('setSelectionRange') &&
+              error.contains('HTMLInputElement')) {
+            return true;
+          }
+
+          return false;
+        }
+
+  # Step 5: Ensure the test calls `_overrideOnError` at the start.
+  # This ensures that the error handling is in place before the test runs.
+  - ensure_line_after_match:
+      match: "testWidgets\\s*\\(\\s*'.*?'\\s*,\\s*\\(WidgetTester\\s+tester\\)\\s*async\\s*\\{"
+      lines:
+        - "    _overrideOnError();"
+      unique: true
+
+  # Step 6: Selectively replace `pumpAndSettle` with `pump` for a specific test.
+  # This can be useful for tests that need more control over the widget tree.
+  - replace_in_test_named:
+      test_name_regex: "^Upload Image Test Case$"
+      pattern: "await\\s+tester\\.pumpAndSettle\\s*\\(\\s*\\)\\s*;"
+      replacement: "await tester.pump();"
+      limit: "first"
+
+  # Step 7: Another selective replacement example: after a specific tap, within 8 lines.
+  # This is useful for making targeted changes to a test.
+  - replace_first_after_match:
+      anchor: "await\\s+tester\\.tap\\(find\\.byKey\\(const\\s+ValueKey\\('Button_uawt'\\)\\)\\)\\s*;"
+      within_lines: 8
+      pattern: "await\\s+tester\\.pumpAndSettle\\s*\\(\\s*\\)\\s*;"
+      replacement: "await tester.pump();"
+
+  # Step 8: Add an example of how to use `byTooltip` for finding widgets.
+  # This is a helpful reminder for how to interact with certain types of widgets.
+  - ensure_line_after_match:
+      match: "testWidgets\\s*\\(\\s*'.*?'\\s*,\\s*\\(WidgetTester\\s+tester\\)\\s*async\\s*\\{"
+      lines:
+        - "    // Example byTooltip usage for dialogs like date pickers"
+        - "    // await tester.tap(find.byTooltip('Open calendar'));"
+        - "    // await tester.pump();"
+      unique: true

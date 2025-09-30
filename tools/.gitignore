@@ -1,0 +1,6 @@
+# Ignore the FlutterFlow token file to prevent accidental exposure.
+.ff_token
+.dart_tool
+pubspec.lock
+.idea
+.vscode
